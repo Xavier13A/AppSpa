@@ -135,10 +135,10 @@ async def save_booking(name: str = Form(...), service: str = Form(...), date: st
     db.add(new_booking)
     db.commit()
     
-    # Mensaje automatizado hacia tu número de WhatsApp Business (Reemplaza por tu número real)
+    # NUEVO: Mensaje automatizado hacia tu número de WhatsApp Business real
     texto_whatsapp = f"Hola Xavier, acabo de agendar una cita en la App. Cliente: {name}. Servicio: {service}. Fecha: {date} a las {time}."
     texto_codificado = texto_whatsapp.replace(" ", "%20")
-    return RedirectResponse(url=f"https://wa.me/593900000000?text={texto_codificado}", status_code=303)
+    return RedirectResponse(url=f"https://wa.me/593963692914?text={texto_codificado}", status_code=303)
 
 # =====================================================================
 # 2. ENTORNO INTERNO (RECEPTOR / AGENDA PRIVADA)
