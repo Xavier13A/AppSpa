@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import create_engine, Column, Integer, String, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+import urllib.parse  # <-- NUEVO: Para codificar el texto de WhatsApp de forma ultra segura
 
 # --- BASE DE DATOS ---
 DATABASE_URL = "sqlite:///./spa_database.db"
@@ -88,9 +89,6 @@ HTML_CLIENTE = """
 </html>
 """
 
-@app.get("/", response_class=HTMLResponse)
-async def home(): return HTML_CLIENTE
-
 @app.get("/book", response_class=HTMLResponse)
 async def booking_form(service: str = "General", msg: str = ""):
     error_banner = f"<div style='color:#d32f2f; font-weight:bold; margin-bottom:15px; background:#ffcdd2; padding:10px; border-radius:5px;'>⚠️ {msg}</div>" if msg else ""
@@ -127,18 +125,22 @@ async def booking_form(service: str = "General", msg: str = ""):
 
 @app.post("/book")
 async def save_booking(name: str = Form(...), service: str = Form(...), date: str = Form(...), time: str = Form(...), db: Session = Depends(get_db)):
+    # 1. Comprobar disponibilidad
     existing = db.query(Booking).filter(Booking.date == date, Booking.time == time).first()
     if existing:
         return RedirectResponse(url=f"/book?service={service}&msg=Este%20horario%20ya%20esta%20reservado.%20Por%20favor%20elige%20otra%20hora%20o%20dia.", status_code=303)
     
+    # 2. Guardar de forma segura en la base de datos primero
     new_booking = Booking(name=name, service=service, date=date, time=time)
     db.add(new_booking)
     db.commit()
     
-    # NUEVO: Mensaje automatizado hacia tu número de WhatsApp Business real
+    # 3. Armar y codificar el texto para WhatsApp sin errores de formato
     texto_whatsapp = f"Hola Xavier, acabo de agendar una cita en la App. Cliente: {name}. Servicio: {service}. Fecha: {date} a las {time}."
-    texto_codificado = texto_whatsapp.replace(" ", "%20")
-    return RedirectResponse(url=f"https://wa.me/593963692914?text={texto_codificado}", status_code=303)
+    texto_seguro = urllib.parse.quote(texto_whatsapp)  # <-- Esto arregla los espacios y puntos
+    
+    # Redirección limpia al número exacto (sin espacios)
+    return RedirectResponse(url=f"https://wa.me/593963692914?text={texto_seguro}", status_code=303)
 
 # =====================================================================
 # 2. ENTORNO INTERNO (RECEPTOR / AGENDA PRIVADA)
