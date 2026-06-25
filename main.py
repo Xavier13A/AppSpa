@@ -6,8 +6,8 @@ from sqlalchemy.orm import sessionmaker, Session
 import urllib.parse
 import json
 
-# --- BASE DE DATOS PERMANENTE ---
-DATABASE_URL = "sqlite:////tmp/spa_database.db"
+# --- BASE DE DATOS LOCAL ---
+DATABASE_URL = "sqlite:///./spa_database.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -22,12 +22,15 @@ class Booking(Base):
 
     __table_args__ = (UniqueConstraint('date', 'time', name='_date_time_uc'),)
 
+# Asegura que las tablas se creen en la base de datos al arrancar
 Base.metadata.create_all(bind=engine)
 
 def get_db():
     db = SessionLocal()
-    try: yield db
-    finally: db.close()
+    try: 
+        yield db
+    finally: 
+        db.close()
 
 app = FastAPI(title="Xavier Spa System")
 
@@ -118,15 +121,11 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
             label {{ font-weight: bold; display: block; margin-top: 15px; color: #333; font-size: 0.95rem; }}
             input[type="text"], input[type="date"] {{ display: block; width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 1rem; }}
             
-            /* GRAFICA DE HORARIOS EN MATRIZ (GRID) */
             .grid-horarios {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }}
             .slot-btn {{ padding: 12px 5px; text-align: center; border-radius: 8px; border: 2px solid #00796b; background: #e0f2f1; color: #004d40; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }}
             .slot-btn:hover {{ background: #00796b; color: white; }}
             
-            /* Clase cuando el usuario selecciona una hora libre */
             .slot-btn.selected {{ background: #004d40 !important; color: white !important; border-color: #002d24 !important; box-shadow: 0 0 8px rgba(0,0,0,0.2); }}
-            
-            /* Clase cuando la hora ya está ocupada */
             .slot-btn.disabled {{ background: #eceff1 !important; color: #b0bec5 !important; border-color: #cfd8dc !important; cursor: not-allowed !important; text-decoration: line-through; }}
             
             button[type="submit"] {{ background: #00796b; color: white; border: none; padding: 14px; width: 100%; border-radius: 8px; margin-top: 30px; font-weight: bold; cursor: pointer; font-size: 1.1rem; box-shadow: 0 4px 12px rgba(0,121,107,0.3); }}
@@ -138,14 +137,8 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
 
             function seleccionarHora(btn, hora) {{
                 if (btn.classList.contains('disabled')) return;
-                
-                // Deseleccionar el botón anterior
                 document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
-                
-                // Seleccionar el actual
                 btn.classList.add('selected');
-                
-                // Guardar el valor en el input oculto que FastAPI va a leer
                 document.getElementById("time_hidden").value = hora;
             }}
 
@@ -161,10 +154,8 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
                 const horasOcupadas = ocupados[fechaSeleccionada] || [];
                 let disponibles = 0;
 
-                // Buscar todos los botones de bloques de horas
                 document.querySelectorAll('.slot-btn').forEach(btn => {{
                     const horaValor = btn.getAttribute('data-time');
-                    
                     if (horasOcupadas.includes(horaValor)) {{
                         btn.classList.add('disabled');
                         btn.classList.remove('selected');
@@ -174,13 +165,11 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
                     }}
                 }});
 
-                // Limpiar la selección oculta al cambiar de día
                 document.getElementById("time_hidden").value = "";
                 document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
 
-                // Mostrar resumen visual informativo
                 infoBox.style.display = "block";
-                infoBox.innerText = `✅ Hay ${{disponibles}} horarios disponibles para esta fecha`;
+                infoBox.innerText = `✅ Hay ${disponibles} horarios disponibles para esta fecha`;
             }}
         </script>
     </head>
@@ -190,7 +179,6 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
             {error_banner}
             
             <input type="hidden" name="service" value="{service}">
-            
             <input type="hidden" id="time_hidden" name="time" required>
             
             <label>Tu Nombre y Apellido:</label>
@@ -228,15 +216,20 @@ async def save_booking(name: str = Form(...), service: str = Form(...), date: st
     if existing:
         return RedirectResponse(url=f"/book?service={service}&msg=Este%20horario%20ya%20esta%20reservado.%20Por%20favor%20elige%20otra%20hora%20o%20dia.", status_code=303)
     
+    # GUARDA PRIMERO EN LA BASE DE DATOS LOCAL
     new_booking = Booking(name=name, service=service, date=date, time=time)
     db.add(new_booking)
     db.commit()
+    db.refresh(new_booking) # Asegura el registro inmediato
     
     texto_whatsapp = f"Hola Xavier, acabo de agendar una cita en la App. Cliente: {name}. Servicio: {service}. Fecha: {date} a las {time}."
     texto_seguro = urllib.parse.quote(texto_whatsapp)
     
     return RedirectResponse(url=f"https://wa.me/593963692914?text={texto_seguro}", status_code=303)
 
+# =====================================================================
+# 2. ENTORNO INTERNO (RECEPTOR / AGENDA PRIVADA)
+# =====================================================================
 @app.get("/admin-agenda", response_class=HTMLResponse)
 async def admin_panel(db: Session = Depends(get_db)):
     bookings = db.query(Booking).order_by(Booking.date, Booking.time).all()
@@ -244,6 +237,7 @@ async def admin_panel(db: Session = Depends(get_db)):
     return f"""
     <html>
     <head>
+        <meta charset="UTF-8">
         <title>Panel de Control - Spa</title>
         <style>
             body {{ font-family: sans-serif; background: #eceff1; padding: 40px; color: #37474f; }}
