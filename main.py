@@ -5,8 +5,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import urllib.parse
 
-# --- BASE DE DATOS ---
-DATABASE_URL = "sqlite:///./spa_database.db"
+# --- BASE DE DATOS PERMANENTE (Usa la carpeta del sistema para evitar borrados) ---
+DATABASE_URL = "sqlite:////tmp/spa_database.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
