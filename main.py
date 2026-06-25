@@ -145,7 +145,7 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
                 // Seleccionar el actual
                 btn.classList.add('selected');
                 
-                // Guardar el valor en el input oculto del formulario
+                // Guardar el valor en el input oculto que FastAPI va a leer
                 document.getElementById("time_hidden").value = hora;
             }}
 
@@ -190,6 +190,7 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
             {error_banner}
             
             <input type="hidden" name="service" value="{service}">
+            
             <input type="hidden" id="time_hidden" name="time" required>
             
             <label>Tu Nombre y Apellido:</label>
