@@ -5,7 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import urllib.parse
 
-# --- BASE DE DATOS PERMANENTE (Usa la carpeta del sistema para evitar borrados) ---
+# --- BASE DE DATOS PERMANENTE ---
 DATABASE_URL = "sqlite:////tmp/spa_database.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -40,7 +40,7 @@ HTML_CLIENTE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xavier Premium Spa</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght=700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root { --primary: #00796b; --secondary: #004d40; --bg: #f4f7f6; }
         body { font-family: 'Poppins', sans-serif; margin: 0; background-color: var(--bg); color: #333; }
@@ -94,33 +94,94 @@ async def index_root():
     return HTML_CLIENTE
 
 @app.get("/book", response_class=HTMLResponse)
-async def booking_form(service: str = "General", msg: str = ""):
+async def booking_form(service: str = "General", msg: str = "", db: Session = Depends(get_db)):
     error_banner = f"<div style='color:#d32f2f; font-weight:bold; margin-bottom:15px; background:#ffcdd2; padding:10px; border-radius:5px;'>⚠️ {msg}</div>" if msg else ""
+    
+    # Consultar qué horas ya están tomadas en general
+    taken_slots = db.query(Booking.date, Booking.time).all()
+    # Pasarlo a un diccionario estructurado para JavaScript { "2026-06-25": ["10:00", "11:00"] }
+    import json
+    slots_dict = {}
+    for d, t in taken_slots:
+        if d not in slots_dict:
+            slots_dict[d] = []
+        slots_dict[d].append(t)
+    
+    taken_json = json.dumps(slots_dict)
+
     return f"""
     <html>
-    <head><style>
-        body {{ font-family: sans-serif; background: #f4f7f6; text-align: center; padding: 50px; }}
-        form {{ background: white; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: left; width: 100%; max-width: 350px; }}
-        label {{ font-weight: bold; display: block; margin-top: 12px; color: #333; }}
-        input, select {{ display: block; width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; }}
-        button {{ background: #00796b; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; margin-top: 25px; font-weight: bold; cursor: pointer; font-size: 1rem; }}
-    </style></head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{ font-family: sans-serif; background: #f4f7f6; text-align: center; padding: 20px; }}
+            form {{ background: white; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: left; width: 100%; max-width: 350px; box-sizing: border-box; }}
+            label {{ font-weight: bold; display: block; margin-top: 12px; color: #333; }}
+            input, select {{ display: block; width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; }}
+            button {{ background: #00796b; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; margin-top: 25px; font-weight: bold; cursor: pointer; font-size: 1rem; }}
+            .info-dispo {{ font-size: 0.85rem; color: #666; margin-top: 2px; font-style: italic; }}
+        </style>
+        <script>
+            // Pasamos los turnos ocupados desde la base de datos a JavaScript
+            const ocupados = {taken_json};
+
+            function actualizarHorarios() {{
+                const fechaSeleccionada = document.getElementById("date_input").value;
+                const selectHora = document.getElementById("time_select");
+                
+                // Limpiar aviso anterior si existe
+                document.getElementById("info_slots").innerText = "Selecciona una fecha para ver horas libres.";
+
+                if (!fechaSeleccionada) return;
+
+                const horasOcupadas Hoy = ocupados[fechaSeleccionada] || [];
+                
+                // Recorrer todas las opciones del menú de horas
+                let disponibles = 0;
+                for (let i = 0; i < selectHora.options.length; i++) {{
+                    let opcion = selectHora.options[i];
+                    if (horasOcupadasHoy.includes(opcion.value)) {{
+                        opcion.disabled = true;
+                        opcion.text = opcion.value + " ❌ (Ocupado)";
+                        opcion.style.color = "#999";
+                    }} else {{
+                        opcion.disabled = false;
+                        opcion.text = opcion.value + "  (Disponible)";
+                        opcion.style.color = "#000";
+                        disponibles++;
+                    }}
+                }}
+                
+                document.getElementById("info_slots").innerText = `Turnos disponibles para hoy: ${{disponibles}}`;
+            }}
+        </script>
+    </head>
     <body>
         <h2>Agendar {service}</h2>
         {error_banner}
         <form action="/book" method="post">
             <input type="hidden" name="service" value="{service}">
+            
             <label>Tu Nombre y Apellido:</label>
             <input type="text" name="name" required placeholder="Ej. Carlos Mendoza">
+            
             <label>Selecciona el Día:</label>
-            <input type="date" name="date" required>
+            <input type="date" id="date_input" name="date" required onchange="actualizarHorarios()">
+            <div id="info_slots" class="info-dispo">Selecciona una fecha para ver horas libres.</div>
+            
             <label>Selecciona el Horario:</label>
-            <select name="time" required>
-                <option value="09:00">09:00 AM</option><option value="10:00">10:00 AM</option>
-                <option value="11:00">11:00 AM</option><option value="12:00">12:00 PM</option>
-                <option value="14:00">02:00 PM</option><option value="15:00">03:00 PM</option>
-                <option value="16:00">04:00 PM</option><option value="17:00">05:00 PM</option>
+            <select id="time_select" name="time" required>
+                <option value="09:00">09:00 AM</option>
+                <option value="10:00">10:00 AM</option>
+                <option value="11:00">11:00 AM</option>
+                <option value="12:00">12:00 PM</option>
+                <option value="14:00">02:00 PM</option>
+                <option value="15:00">03:00 PM</option>
+                <option value="16:00">04:00 PM</option>
+                <option value="17:00">05:00 PM</option>
             </select>
+            
             <button type="submit">Confirmar Cita vía WhatsApp</button>
         </form>
     </body>
@@ -142,9 +203,6 @@ async def save_booking(name: str = Form(...), service: str = Form(...), date: st
     
     return RedirectResponse(url=f"https://wa.me/593963692914?text={texto_seguro}", status_code=303)
 
-# =====================================================================
-# 2. ENTORNO INTERNO (RECEPTOR / AGENDA PRIVADA)
-# =====================================================================
 @app.get("/admin-agenda", response_class=HTMLResponse)
 async def admin_panel(db: Session = Depends(get_db)):
     bookings = db.query(Booking).order_by(Booking.date, Booking.time).all()
