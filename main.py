@@ -7,7 +7,7 @@ import urllib.parse
 import json
 
 # --- BASE DE DATOS PERMANENTE ---
-DATABASE_URL = "sqlite://///tmp/spa_database.db"
+DATABASE_URL = "sqlite:////tmp/spa_database.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -145,7 +145,7 @@ async def booking_form(service: str = "General", msg: str = "", db: Session = De
                 // Seleccionar el actual
                 btn.classList.add('selected');
                 
-                # Guardar el valor en el input oculto del formulario
+                // Guardar el valor en el input oculto del formulario
                 document.getElementById("time_hidden").value = hora;
             }}
 
